@@ -5,11 +5,11 @@
  */
 
 use GuzzleHttp\Psr7\Request;
-use \Minishlink\WebPush\MessageSentReport;
+use \Minishlink\WebPush\reports\MessageSentReport;
 use \GuzzleHttp\Psr7\Response;
 
 /**
- * @covers \Minishlink\WebPush\MessageSentReport
+ * @covers \Minishlink\WebPush\reports\MessageSentReport
  */
 class MessageSentReportTest extends \PHPUnit\Framework\TestCase {
 

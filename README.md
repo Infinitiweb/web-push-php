@@ -80,7 +80,7 @@ foreach ($notifications as $notification) {
 
 /**
  * Check sent results
- * @var MessageSentReport $report
+ * @var \Minishlink\WebPush\reports\IReport $report
  */
 foreach ($webPush->flush() as $report) {
     $endpoint = $report->getRequest()->getUri()->__toString();
@@ -94,7 +94,7 @@ foreach ($webPush->flush() as $report) {
 
 /**
  * send one notification and flush directly
- * @var \Generator<MessageSentReport> $sent
+ * @var \Generator<\Minishlink\WebPush\reports\IReport> $sent
  */
 $sent = $webPush->sendNotification(
     $notifications[0]['subscription'],
@@ -209,13 +209,13 @@ it as a parameter : `$webPush->flush($batchSize)`.
 
 ### Server errors
 You can see what the browser vendor's server sends back in case it encountered an error (push subscription expiration, wrong parameters...).
-`sendNotification()` (with `$flush` as `true`) and `flush()` **always** returns a [`\Generator`](http://php.net/manual/en/language.generators.php) with [`MessageSentReport`](https://github.com/web-push-libs/web-push-php/blob/master/src/MessageSentReport.php) objects, even if you just send one notification.
+`sendNotification()` (with `$flush` as `true`) and `flush()` **always** returns a [`\Generator`](http://php.net/manual/en/language.generators.php) with [`IReport`](https://github.com/Infinitiweb/web-push-php/tree/master/src/reports/IReport.php) objects, even if you just send one notification.
 To loop through the results, just pass it into `foreach`. You can also use [`iterator_to_array`](http://php.net/manual/en/function.iterator-to-array.php) to check the contents while debugging.
 
 ```php
 <?php
 
-/** @var \Minishlink\WebPush\MessageSentReport $report */
+/** @var \Minishlink\WebPush\reports\IReport $report */
 foreach ($webPush->flush() as $report) {
     $endpoint = $report->getEndpoint();
 

@@ -180,7 +180,7 @@ final class PushServiceTest extends PHPUnit\Framework\TestCase
                     $sendResp = $this->webPush->sendNotification($subscription, $payload, true);
                     $this->assertInstanceOf(\Generator::class, $sendResp);
 
-                    /** @var \Minishlink\WebPush\MessageSentReport $report */
+                    /** @var \Minishlink\WebPush\reports\MessageSentReport $report */
 	                foreach ($sendResp as $report) {
                     	$this->assertTrue($report->isSuccess());
                     }
