@@ -4,7 +4,7 @@
  * @started: 03.09.2018 9:21
  */
 
-namespace Minishlink\WebPush;
+namespace Minishlink\WebPush\reports;
 
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -12,41 +12,29 @@ use Psr\Http\Message\ResponseInterface;
 /**
  * Standardized response from sending a message
  */
-class MessageSentReport implements \JsonSerializable
+class MessageSentReport extends AbstractReport implements \JsonSerializable
 {
-
-    /**
-     * @var boolean
-     */
+    /** @var bool */
     protected $success;
-
-    /**
-     * @var RequestInterface
-     */
+    /** @var RequestInterface */
     protected $request;
-
-    /**
-     * @var ResponseInterface | null
-     */
+    /** @var ResponseInterface | null */
     protected $response;
-
-    /**
-     * @var string
-     */
+    /** @var string */
     protected $reason;
 
     /**
-     * @param RequestInterface  $request
+     * @param RequestInterface $request
      * @param ResponseInterface $response
-     * @param bool              $success
-     * @param string            $reason
+     * @param bool $success
+     * @param string $reason
      */
     public function __construct(RequestInterface $request, ?ResponseInterface $response = null, bool $success = true, $reason = 'OK')
     {
-        $this->request  = $request;
+        $this->request = $request;
         $this->response = $response;
-        $this->success  = $success;
-        $this->reason   = $reason;
+        $this->success = $success;
+        $this->reason = $reason;
     }
 
     /**
@@ -55,6 +43,14 @@ class MessageSentReport implements \JsonSerializable
     public function isSuccess(): bool
     {
         return $this->success;
+    }
+
+    /**
+     * @return bool
+     */
+    public function isValid(): bool
+    {
+        return true;
     }
 
     /**
@@ -166,16 +162,16 @@ class MessageSentReport implements \JsonSerializable
     }
 
     /**
-     * @return array|mixed
+     * @return array
      */
-    public function jsonSerialize()
+    public function jsonSerialize(): array
     {
         return [
-            'success'  => $this->isSuccess(),
-            'expired'  => $this->isSubscriptionExpired(),
-            'reason'   => $this->reason,
+            'success' => $this->isSuccess(),
+            'expired' => $this->isSubscriptionExpired(),
+            'reason' => $this->reason,
             'endpoint' => $this->getEndpoint(),
-            'payload'  => $this->request->getBody()->getContents(),
+            'payload' => $this->request->getBody()->getContents(),
         ];
     }
 }

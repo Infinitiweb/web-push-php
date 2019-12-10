@@ -16,7 +16,12 @@ namespace Minishlink\WebPush;
 use Base64Url\Base64Url;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
+use GuzzleHttp\Promise\PromiseInterface;
 use GuzzleHttp\Psr7\Request;
+use Minishlink\WebPush\forms\RequestForm;
+use Minishlink\WebPush\reports\InvalidSubscribeDataReport;
+use Minishlink\WebPush\reports\IReport;
+use Minishlink\WebPush\reports\MessageSentReport;
 use Psr\Http\Message\ResponseInterface;
 
 class WebPush
@@ -110,7 +115,7 @@ class WebPush
      * @param array $options Array with several options tied to this notification. If not set, will use the default options that you can set in the WebPush object
      * @param array $auth Use this auth details instead of what you provided when creating WebPush
      *
-     * @return \Generator|MessageSentReport[]|true Return an array of information if $flush is set to true and the queued requests has failed.
+     * @return \Generator|IReport[]|true Return an array of information if $flush is set to true and the queued requests has failed.
      *                    Else return true
      *
      * @throws \ErrorException
@@ -144,8 +149,7 @@ class WebPush
      *
      * @param null|int $batchSize Defaults the value defined in defaultOptions during instantiation (which defaults to 1000).
      *
-     * @return \Generator|MessageSentReport[]
-     * @throws \ErrorException
+     * @return \Generator|IReport[]
      */
     public function flush(?int $batchSize = null): \Generator
     {
@@ -165,11 +169,16 @@ class WebPush
 
         foreach ($batches as $batch) {
             // for each endpoint server type
-            $requests = $this->prepare($batch);
-
+            $requestForms = $this->prepare($batch);
             $promises = [];
 
-            foreach ($requests as $request) {
+            foreach ($requestForms as $requestForm) {
+                if (!$requestForm->isValid()) {
+                    $promises[] = new InvalidSubscribeDataReport($requestForm->getNotification(), 'Invalid data of notification.');
+                    continue;
+                }
+
+                $request = $requestForm->getRequest();
                 $promises[] = $this->client->sendAsync($request)
                     ->then(function ($response) use ($request) {
                         /** @var ResponseInterface $response * */
@@ -182,7 +191,11 @@ class WebPush
             }
 
             foreach ($promises as $promise) {
-                yield $promise->wait();
+                if ($promise instanceof PromiseInterface) {
+                    yield $promise->wait();
+                } else {
+                    yield $promise;
+                }
             }
         }
 
@@ -193,96 +206,97 @@ class WebPush
 
     /**
      * @param array $notifications
-     *
-     * @return array
-     *
-     * @throws \ErrorException
+     * @return RequestForm[]
      */
     private function prepare(array $notifications): array
     {
         $requests = [];
         /** @var Notification $notification */
         foreach ($notifications as $notification) {
-            $subscription = $notification->getSubscription();
-            $endpoint = $subscription->getEndpoint();
-            $userPublicKey = $subscription->getPublicKey();
-            $userAuthToken = $subscription->getAuthToken();
-            $contentEncoding = $subscription->getContentEncoding();
-            $payload = $notification->getPayload();
-            $options = $notification->getOptions($this->getDefaultOptions());
-            $auth = $notification->getAuth($this->auth);
+            try {
+                $subscription = $notification->getSubscription();
+                $endpoint = $subscription->getEndpoint();
+                $userPublicKey = $subscription->getPublicKey();
+                $userAuthToken = $subscription->getAuthToken();
+                $contentEncoding = $subscription->getContentEncoding();
+                $payload = $notification->getPayload();
+                $options = $notification->getOptions($this->getDefaultOptions());
+                $auth = $notification->getAuth($this->auth);
 
-            if (!empty($payload) && !empty($userPublicKey) && !empty($userAuthToken)) {
-                if (!$contentEncoding) {
-                    throw new \ErrorException('Subscription should have a content encoding');
-                }
+                if (!empty($payload) && !empty($userPublicKey) && !empty($userAuthToken)) {
+                    if (!$contentEncoding) {
+                        throw new \ErrorException('Subscription should have a content encoding');
+                    }
 
-                $encrypted = Encryption::encrypt($payload, $userPublicKey, $userAuthToken, $contentEncoding);
-                $cipherText = $encrypted['cipherText'];
-                $salt = $encrypted['salt'];
-                $localPublicKey = $encrypted['localPublicKey'];
+                    $encrypted = Encryption::encrypt($payload, $userPublicKey, $userAuthToken, $contentEncoding);
+                    $cipherText = $encrypted['cipherText'];
+                    $salt = $encrypted['salt'];
+                    $localPublicKey = $encrypted['localPublicKey'];
 
-                $headers = [
-                    'Content-Type' => 'application/octet-stream',
-                    'Content-Encoding' => $contentEncoding,
-                ];
+                    $headers = [
+                        'Content-Type' => 'application/octet-stream',
+                        'Content-Encoding' => $contentEncoding,
+                    ];
 
-                if ($contentEncoding === "aesgcm") {
-                    $headers['Encryption'] = 'salt='.Base64Url::encode($salt);
-                    $headers['Crypto-Key'] = 'dh='.Base64Url::encode($localPublicKey);
-                }
+                    if ($contentEncoding === "aesgcm") {
+                        $headers['Encryption'] = 'salt=' . Base64Url::encode($salt);
+                        $headers['Crypto-Key'] = 'dh=' . Base64Url::encode($localPublicKey);
+                    }
 
-                $encryptionContentCodingHeader = Encryption::getContentCodingHeader($salt, $localPublicKey, $contentEncoding);
-                $content = $encryptionContentCodingHeader.$cipherText;
+                    $encryptionContentCodingHeader = Encryption::getContentCodingHeader($salt, $localPublicKey, $contentEncoding);
+                    $content = $encryptionContentCodingHeader . $cipherText;
 
-                $headers['Content-Length'] = Utils::safeStrlen($content);
-            } else {
-                $headers = [
-                    'Content-Length' => 0,
-                ];
-
-                $content = '';
-            }
-
-            $headers['TTL'] = $options['TTL'];
-
-            if (isset($options['urgency'])) {
-                $headers['Urgency'] = $options['urgency'];
-            }
-
-            if (isset($options['topic'])) {
-                $headers['Topic'] = $options['topic'];
-            }
-
-            // if GCM
-            if (substr($endpoint, 0, strlen(self::GCM_URL)) === self::GCM_URL) {
-                if (array_key_exists('GCM', $auth)) {
-                    $headers['Authorization'] = 'key='.$auth['GCM'];
+                    $headers['Content-Length'] = Utils::safeStrlen($content);
                 } else {
-                    throw new \ErrorException('No GCM API Key specified.');
-                }
-            }
-            // if VAPID (GCM doesn't support it but FCM does)
-            elseif (array_key_exists('VAPID', $auth) && $contentEncoding) {
-                $audience = parse_url($endpoint, PHP_URL_SCHEME).'://'.parse_url($endpoint, PHP_URL_HOST);
-                if (!parse_url($audience)) {
-                    throw new \ErrorException('Audience "'.$audience.'"" could not be generated.');
+                    $headers = [
+                        'Content-Length' => 0,
+                    ];
+
+                    $content = '';
                 }
 
-                $vapidHeaders = $this->getVAPIDHeaders($audience, $contentEncoding, $auth['VAPID']);
+                $headers['TTL'] = $options['TTL'];
 
-                $headers['Authorization'] = $vapidHeaders['Authorization'];
+                if (isset($options['urgency'])) {
+                    $headers['Urgency'] = $options['urgency'];
+                }
 
-                if ($contentEncoding === 'aesgcm') {
-                    if (array_key_exists('Crypto-Key', $headers)) {
-                        $headers['Crypto-Key'] .= ';'.$vapidHeaders['Crypto-Key'];
+                if (isset($options['topic'])) {
+                    $headers['Topic'] = $options['topic'];
+                }
+
+                // if GCM
+                if (substr($endpoint, 0, strlen(self::GCM_URL)) === self::GCM_URL) {
+                    if (array_key_exists('GCM', $auth)) {
+                        $headers['Authorization'] = 'key=' . $auth['GCM'];
                     } else {
-                        $headers['Crypto-Key'] = $vapidHeaders['Crypto-Key'];
+                        throw new \ErrorException('No GCM API Key specified.');
+                    }
+                } // if VAPID (GCM doesn't support it but FCM does)
+                elseif (array_key_exists('VAPID', $auth) && $contentEncoding) {
+                    $audience = parse_url($endpoint, PHP_URL_SCHEME) . '://' . parse_url($endpoint, PHP_URL_HOST);
+                    if (!parse_url($audience)) {
+                        throw new \ErrorException('Audience "' . $audience . '"" could not be generated.');
+                    }
+
+                    $vapidHeaders = $this->getVAPIDHeaders($audience, $contentEncoding, $auth['VAPID']);
+
+                    $headers['Authorization'] = $vapidHeaders['Authorization'];
+
+                    if ($contentEncoding === 'aesgcm') {
+                        if (array_key_exists('Crypto-Key', $headers)) {
+                            $headers['Crypto-Key'] .= ';' . $vapidHeaders['Crypto-Key'];
+                        } else {
+                            $headers['Crypto-Key'] = $vapidHeaders['Crypto-Key'];
+                        }
                     }
                 }
+            } catch (\Throwable $e) {
+                $requests[] = new RequestForm(false, null, $notification);
+                continue;
             }
 
-            $requests[] = new Request('POST', $endpoint, $headers, $content);
+            $requests[] = new RequestForm(true, new Request('POST', $endpoint, $headers, $content));
         }
 
         return $requests;

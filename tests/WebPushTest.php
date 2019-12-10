@@ -166,7 +166,7 @@ final class WebPushTest extends PHPUnit\Framework\TestCase
 	    $this->webPush->sendNotification($nonExistantSubscription, json_encode(['test' => 2]));
 	    $this->webPush->sendNotification($nonExistantSubscription, json_encode(['test' => 3]));
 
-	    /** @var \Minishlink\WebPush\MessageSentReport $report */
+	    /** @var \Minishlink\WebPush\reports\IReport $report */
 	    foreach ($this->webPush->flush() as $report) {
 	    	$this->assertFalse($report->isSuccess());
 	    	$this->assertTrue($report->isSubscriptionExpired());
