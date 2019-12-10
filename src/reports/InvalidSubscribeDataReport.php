@@ -49,4 +49,12 @@ class InvalidSubscribeDataReport extends AbstractReport
     {
         return $this->message;
     }
+
+    /**
+     * @return Notification
+     */
+    public function getNotification(): Notification
+    {
+        return $this->notification;
+    }
 }

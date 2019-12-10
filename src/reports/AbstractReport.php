@@ -2,6 +2,7 @@
 
 namespace Minishlink\WebPush\reports;
 
+use Minishlink\WebPush\Notification;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 
@@ -81,5 +82,13 @@ abstract class AbstractReport implements IReport
     public function getMessage(): string
     {
         return '';
+    }
+
+    /**
+     * @return Notification|null
+     */
+    public function getNotification(): ?Notification
+    {
+        return null;
     }
 }

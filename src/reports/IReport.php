@@ -2,6 +2,7 @@
 
 namespace Minishlink\WebPush\reports;
 
+use Minishlink\WebPush\Notification;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 
@@ -65,4 +66,9 @@ interface IReport
      * @return string
      */
     public function getMessage(): string;
+
+    /**
+     * @return Notification|null
+     */
+    public function getNotification(): ?Notification;
 }
